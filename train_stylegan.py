@@ -1,26 +1,28 @@
 import torch.multiprocessing
-
 torch.multiprocessing.set_sharing_strategy('file_system')    # a fix for the "OSError: too many files" exception
 
 import math
 import shutil
 from pathlib import Path
 
+import torch
 import hydra
 import pytorch_lightning as pl
-import torch
-from cleanfid import fid
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
 from torch_ema import ExponentialMovingAverage
+from torchvision.datasets import CIFAR10
+from torchvision.transforms import ToTensor
 from torchvision.utils import save_image
+from cleanfid import fid
 
 from dataset.image import ImageDataset
 from model.augment import AugmentPipe
-from model.discriminator import Discriminator
 from model.generator import Generator
+from model.discriminator import Discriminator
 from model.loss import PathLengthPenalty, compute_gradient_penalty
 from trainer import create_trainer
+
 
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
@@ -44,8 +46,8 @@ class StyleGAN2Trainer(pl.LightningModule):
         self.D = Discriminator(config.image_size, 3)
         self.augment_pipe = AugmentPipe(config.ada_start_p, config.ada_target, config.ada_interval, config.ada_fixed, config.batch_size)
         self.grid_z = torch.randn(config.num_eval_images, self.config.latent_dim)
-        self.train_set = ImageDataset(config.dataset_path, config.image_size)
-        self.val_set = ImageDataset(config.dataset_path, config.image_size, config.num_eval_images)
+        self.train_set = CIFAR10(config.dataset_path, train=True, download=True, transform=ToTensor())
+        self.val_set = CIFAR10(config.dataset_path, train=False, download=True, transform=ToTensor())
         self.automatic_optimization = False
         self.path_length_penalty = PathLengthPenalty(0.01, 2)
         self.ema = None
@@ -230,7 +232,7 @@ class StyleGAN2Trainer(pl.LightningModule):
             self.ema = ExponentialMovingAverage(self.G.parameters(), 0.995)
 
 
-@hydra.main(config_path='../config', config_name='stylegan2')
+@hydra.main(config_path='./config', config_name='stylegan2')
 def main(config):
     trainer = create_trainer("StyleGAN2", config)
     model = StyleGAN2Trainer(config)
