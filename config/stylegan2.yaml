@@ -28,7 +28,7 @@ generator: stylegan2
 image_size: 32
 num_eval_images: 8096
 num_vis_images: 1024
-batch_size: 16
+batch_size: 256
 batch_gpu: null
 num_workers: 8
 
