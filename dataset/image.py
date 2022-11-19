@@ -5,7 +5,6 @@ from PIL import Image
 
 
 class ImageDataset(torch.utils.data.Dataset):
-
     def __init__(self, path, image_size, size=None):
         super().__init__()
         self.paths = [p for p in Path(path).iterdir() if p.name.endswith('.png') or p.name.endswith('.jpg')]
