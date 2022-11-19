@@ -16,7 +16,7 @@ from torchvision.transforms import ToTensor
 from torchvision.utils import save_image
 from cleanfid import fid
 
-from dataset.image import ImageDataset
+from dataset.image import CIFAR10Dataset
 from model.augment import AugmentPipe
 from model.generator import Generator
 from model.discriminator import Discriminator
@@ -46,8 +46,20 @@ class StyleGAN2Trainer(pl.LightningModule):
         self.D = Discriminator(config.image_size, 3)
         self.augment_pipe = AugmentPipe(config.ada_start_p, config.ada_target, config.ada_interval, config.ada_fixed, config.batch_size)
         self.grid_z = torch.randn(config.num_eval_images, self.config.latent_dim)
-        self.train_set = CIFAR10(config.dataset_path, train=True, download=True, transform=ToTensor())
-        self.val_set = CIFAR10(config.dataset_path, train=False, download=True, transform=ToTensor())
+        raw_train_cifar = CIFAR10(
+            config.dataset_path,
+            train=True,
+            download=True,
+            transform=ToTensor(),
+        )
+        raw_val_cifar = CIFAR10(
+            config.dataset_path,
+            train=False,
+            download=True,
+            transform=ToTensor(),
+        )
+        self.train_set = CIFAR10Dataset(raw_train_cifar)
+        self.val_set = CIFAR10Dataset(raw_val_cifar)
         self.automatic_optimization = False
         self.path_length_penalty = PathLengthPenalty(0.01, 2)
         self.ema = None
