@@ -1,4 +1,3 @@
-dataset_path: data/ffhq
 dataset_path: data
 
 experiment: fast_dev
