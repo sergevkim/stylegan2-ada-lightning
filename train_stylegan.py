@@ -9,8 +9,10 @@ from pathlib import Path
 import hydra
 import pytorch_lightning as pl
 import torch
+import torchvision
 import wandb
 from cleanfid import fid
+from PIL import Image
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
 from torch_ema import ExponentialMovingAverage
@@ -228,14 +230,25 @@ class StyleGAN2Trainer(pl.LightningModule):
                 vis_generated_images.append(fake)
         torch.cuda.empty_cache()
         vis_generated_images = torch.cat(vis_generated_images, dim=0)
-        images_grid = save_image(
+
+        # make grid
+        grid = torchvision.make_grid(
+            vis_generated_images,
+            nrow=int(math.sqrt(vis_generated_images.shape[0])),
+            value_range=(-1, 1),
+            normalize=True,
+        )
+        ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+        grid_image = Image.fromarray(ndarr)
+        self.logger.experiment.log({'fake_images': [wandb.Image(grid_image)]})
+
+        save_image(
             vis_generated_images,
             output_dir_vis / f"{prefix}{self.global_step:06d}.png",
             nrow=int(math.sqrt(vis_generated_images.shape[0])),
             value_range=(-1, 1),
             normalize=True,
         )
-        self.logger.experiment.log({'fake_images': [wandb.Image(images_grid)]})
 
     def create_directories(self):
         output_dir_fid_real = Path(f'runs/{self.config.experiment}/fid/real')
