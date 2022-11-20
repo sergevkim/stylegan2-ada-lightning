@@ -232,7 +232,7 @@ class StyleGAN2Trainer(pl.LightningModule):
         vis_generated_images = torch.cat(vis_generated_images, dim=0)
 
         # make grid
-        grid = torchvision.make_grid(
+        grid = torchvision.utils.make_grid(
             vis_generated_images,
             nrow=int(math.sqrt(vis_generated_images.shape[0])),
             value_range=(-1, 1),
