@@ -1,28 +1,29 @@
 import torch.multiprocessing
+
 torch.multiprocessing.set_sharing_strategy('file_system')    # a fix for the "OSError: too many files" exception
 
 import math
 import shutil
 from pathlib import Path
 
-import torch
 import hydra
 import pytorch_lightning as pl
+import torch
+import wandb
+from cleanfid import fid
 from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.data import DataLoader
 from torch_ema import ExponentialMovingAverage
 from torchvision.datasets import CIFAR10
 from torchvision.transforms import ToTensor
 from torchvision.utils import save_image
-from cleanfid import fid
 
 from dataset.image import CIFAR10Dataset
 from model.augment import AugmentPipe
-from model.generator import Generator
 from model.discriminator import Discriminator
+from model.generator import Generator
 from model.loss import PathLengthPenalty, compute_gradient_penalty
 from trainer import create_trainer
-
 
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
@@ -227,7 +228,14 @@ class StyleGAN2Trainer(pl.LightningModule):
                 vis_generated_images.append(fake)
         torch.cuda.empty_cache()
         vis_generated_images = torch.cat(vis_generated_images, dim=0)
-        save_image(vis_generated_images, output_dir_vis / f"{prefix}{self.global_step:06d}.png", nrow=int(math.sqrt(vis_generated_images.shape[0])), value_range=(-1, 1), normalize=True)
+        images_grid = save_image(
+            vis_generated_images,
+            output_dir_vis / f"{prefix}{self.global_step:06d}.png",
+            nrow=int(math.sqrt(vis_generated_images.shape[0])),
+            value_range=(-1, 1),
+            normalize=True,
+        )
+        self.logger.experiment.log({'fake_images': [wandb.Image(images_grid)]})
 
     def create_directories(self):
         output_dir_fid_real = Path(f'runs/{self.config.experiment}/fid/real')
