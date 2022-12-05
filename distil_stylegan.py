@@ -8,8 +8,10 @@ from collections import OrderedDict
 from pathlib import Path
 
 import hydra
+import lpips
 import pytorch_lightning as pl
 import torch
+import torch.nn as nn
 import torchvision
 import wandb
 from cleanfid import fid
@@ -105,6 +107,9 @@ class StyleGAN2Module(pl.LightningModule):
         self.path_length_penalty = PathLengthPenalty(0.01, 2)
         self.ema = None
 
+        self.rgb_criterion = nn.L1Loss()
+        self.lpips_criterion = lpips.LPIPS(net='vgg')
+
     def configure_optimizers(self):
         g_opt = torch.optim.Adam(list(self.G.parameters()), lr=self.config.lr_g, betas=(0.0, 0.99), eps=1e-8)
         d_opt = torch.optim.Adam(self.D.parameters(), lr=self.config.lr_d, betas=(0.0, 0.99), eps=1e-8)
@@ -149,18 +154,37 @@ class StyleGAN2Module(pl.LightningModule):
 
         if True: #TODO flag config teacher
             g_opt.zero_grad(set_to_none=True)
-            log_kd_loss = \
+            log_rgb_loss = \
                 torch.tensor(0, dtype=torch.float32, device=self.device)
             for acc_step in range(total_acc_steps):
                 fake, w = self.forward()
-                kd = self.calc_kd_loss(fake, w)
-                if not torch.isnan(plp):
-                    kd_loss = self.config.kd_coef * kd
-                    self.manual_backward(kd_loss)
-                    log_kd_loss += kd.detach()
+                loss_rgb0 = self.rgb_criterion(fake, teacher_fake)
+
+                if not torch.isnan(loss_rgb0):
+                    loss_rgb = self.config.rgb_coef * loss_rgb0
+                    self.manual_backward(loss_rgb)
+                    log_rgb_loss += loss_rgb.detach()
             g_opt.step()
-            log_plp_loss /= total_acc_steps
-            self.log("KD_loss", log_kd_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
+            log_rgb_loss /= total_acc_steps
+            self.log("rgb_loss", log_rgb_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
+
+        if True: #TODO flag config teacher
+            g_opt.zero_grad(set_to_none=True)
+            log_lpips_loss = \
+                torch.tensor(0, dtype=torch.float32, device=self.device)
+            for acc_step in range(total_acc_steps):
+                fake, w = self.forward()
+                teacher_fake = \
+                    self.teacher_generator.synthesis(w, noise_mode='random')
+                loss_lpips0 = self.lpips_criterion(fake, teacher_fake)
+
+                if not torch.isnan(loss_lpips0):
+                    loss_lpips = self.config.lpips_coef * loss_lpips0
+                    self.manual_backward(loss_lpips)
+                    log_lpips_loss += loss_lpips.detach()
+            g_opt.step()
+            log_lpips_loss /= total_acc_steps
+            self.log("lpips_loss", log_lpips_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
         # torch.nn.utils.clip_grad_norm_(self.G.parameters(), max_norm=1.0)
 
         # optimize discriminator
@@ -328,4 +352,3 @@ def main(config):
 
 if __name__ == '__main__':
     main()
-
