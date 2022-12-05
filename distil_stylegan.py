@@ -77,6 +77,7 @@ class StyleGAN2Module(pl.LightningModule):
             w_dim=config.latent_dim,
             img_resolution=32,
             img_channels=3,
+            channels_max=256, #twice less than in teacher's network1
             synthesis_layer='stylegan2',
         )
 
@@ -152,37 +153,35 @@ class StyleGAN2Module(pl.LightningModule):
             log_plp_loss /= total_acc_steps
             self.log("rPLP", log_plp_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
 
-        if True: #TODO flag config teacher
-            g_opt.zero_grad(set_to_none=True)
-            log_rgb_loss = \
-                torch.tensor(0, dtype=torch.float32, device=self.device)
-            for acc_step in range(total_acc_steps):
-                fake, w = self.forward()
-                teacher_fake = \
-                    self.teacher_generator.synthesis(w, noise_mode='random')
-                loss_rgb0 = self.rgb_criterion(fake, teacher_fake)
-                loss_rgb = self.config.rgb_coef * loss_rgb0
-                self.manual_backward(loss_rgb)
-                log_rgb_loss += loss_rgb.detach()
-            g_opt.step()
-            log_rgb_loss /= total_acc_steps
-            self.log("rgb_loss", log_rgb_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
+        g_opt.zero_grad(set_to_none=True)
+        log_rgb_loss = \
+            torch.tensor(0, dtype=torch.float32, device=self.device)
+        for acc_step in range(total_acc_steps):
+            fake, w = self.forward()
+            teacher_fake = \
+                self.teacher_generator.synthesis(w, noise_mode='random')
+            loss_rgb0 = self.rgb_criterion(fake, teacher_fake)
+            loss_rgb = self.config.rgb_coef * loss_rgb0
+            self.manual_backward(loss_rgb)
+            log_rgb_loss += loss_rgb.detach()
+        g_opt.step()
+        log_rgb_loss /= total_acc_steps
+        self.log("rgb_loss", log_rgb_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
 
-        if True: #TODO flag config teacher
-            g_opt.zero_grad(set_to_none=True)
-            log_lpips_loss = \
-                torch.tensor(0, dtype=torch.float32, device=self.device)
-            for acc_step in range(total_acc_steps):
-                fake, w = self.forward()
-                teacher_fake = \
-                    self.teacher_generator.synthesis(w, noise_mode='random')
-                loss_lpips0 = self.lpips_criterion(fake, teacher_fake).squeeze()
-                loss_lpips = self.config.lpips_coef * loss_lpips0
-                self.manual_backward(loss_lpips)
-                log_lpips_loss += loss_lpips.detach()
-            g_opt.step()
-            log_lpips_loss /= total_acc_steps
-            self.log("lpips_loss", log_lpips_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
+        g_opt.zero_grad(set_to_none=True)
+        log_lpips_loss = \
+            torch.tensor(0, dtype=torch.float32, device=self.device)
+        for acc_step in range(total_acc_steps):
+            fake, w = self.forward()
+            teacher_fake = \
+                self.teacher_generator.synthesis(w, noise_mode='random')
+            loss_lpips0 = self.lpips_criterion(fake, teacher_fake).mean()
+            loss_lpips = self.config.lpips_coef * loss_lpips0
+            self.manual_backward(loss_lpips)
+            log_lpips_loss += loss_lpips.detach()
+        g_opt.step()
+        log_lpips_loss /= total_acc_steps
+        self.log("lpips_loss", log_lpips_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
         # torch.nn.utils.clip_grad_norm_(self.G.parameters(), max_norm=1.0)
 
         # optimize discriminator
