@@ -45,7 +45,7 @@ def create_trainer(name, config):
                          settings=wandb.Settings(start_method='thread'))
     checkpoint_callback = ModelCheckpoint(dirpath=(Path("runs") / config.experiment / "checkpoints"),
                                           filename='_{epoch}',
-                                          save_top_k=-1,
+                                          save_top_k=3,
                                           verbose=False,
                                           every_n_epochs=config.save_epoch)
     gpu_count = torch.cuda.device_count()
