@@ -176,7 +176,7 @@ class StyleGAN2Module(pl.LightningModule):
                 fake, w = self.forward()
                 teacher_fake = \
                     self.teacher_generator.synthesis(w, noise_mode='random')
-                loss_lpips0 = self.lpips_criterion(fake, teacher_fake)
+                loss_lpips0 = self.lpips_criterion(fake, teacher_fake).squeeze()
                 loss_lpips = self.config.lpips_coef * loss_lpips0
                 self.manual_backward(loss_lpips)
                 log_lpips_loss += loss_lpips.detach()
