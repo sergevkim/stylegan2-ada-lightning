@@ -23,7 +23,7 @@ from torchvision.utils import save_image
 from dataset.image import CIFAR10Dataset
 from model.augment import AugmentPipe
 from model.discriminator import Discriminator
-from model.generator import Generator
+from model.generator import Generator, SynthesisNetwork
 from model.loss import PathLengthPenalty, compute_gradient_penalty
 from trainer import create_trainer
 
@@ -44,6 +44,13 @@ class StyleGAN2Trainer(pl.LightningModule):
             config.num_mapping_layers,
             config.image_size,
             img_channels=3,
+            synthesis_layer=config.generator,
+        )
+        self.G.synthesis = SynthesisNetwork(
+            w_dim=config.latent_dim,
+            img_resolution=config.image_size,
+            img_channels=3,
+            channel_max=256,
             synthesis_layer=config.generator,
         )
         self.D = Discriminator(config.image_size, 3)
