@@ -161,11 +161,9 @@ class StyleGAN2Module(pl.LightningModule):
                 teacher_fake = \
                     self.teacher_generator.synthesis(w, noise_mode='random')
                 loss_rgb0 = self.rgb_criterion(fake, teacher_fake)
-
-                if not torch.isnan(loss_rgb0):
-                    loss_rgb = self.config.rgb_coef * loss_rgb0
-                    self.manual_backward(loss_rgb)
-                    log_rgb_loss += loss_rgb.detach()
+                loss_rgb = self.config.rgb_coef * loss_rgb0
+                self.manual_backward(loss_rgb)
+                log_rgb_loss += loss_rgb.detach()
             g_opt.step()
             log_rgb_loss /= total_acc_steps
             self.log("rgb_loss", log_rgb_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
@@ -179,11 +177,9 @@ class StyleGAN2Module(pl.LightningModule):
                 teacher_fake = \
                     self.teacher_generator.synthesis(w, noise_mode='random')
                 loss_lpips0 = self.lpips_criterion(fake, teacher_fake)
-
-                if not torch.isnan(loss_lpips0):
-                    loss_lpips = self.config.lpips_coef * loss_lpips0
-                    self.manual_backward(loss_lpips)
-                    log_lpips_loss += loss_lpips.detach()
+                loss_lpips = self.config.lpips_coef * loss_lpips0
+                self.manual_backward(loss_lpips)
+                log_lpips_loss += loss_lpips.detach()
             g_opt.step()
             log_lpips_loss /= total_acc_steps
             self.log("lpips_loss", log_lpips_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
