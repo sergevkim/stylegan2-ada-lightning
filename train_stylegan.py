@@ -71,7 +71,7 @@ class StyleGAN2Trainer(pl.LightningModule):
         self.train_set = CIFAR10Dataset(raw_train_cifar)
         self.val_set = CIFAR10Dataset(raw_val_cifar)
         self.automatic_optimization = False
-        self.path_length_penalty = PathLengthPenalty(0.01, 2)
+        self.path_length_penalty = PathLengthPenalty(0.01, 2) # https://github.com/NVlabs/stylegan2-ada-pytorch/blob/main/train.py#L196
         self.ema = None
 
     def configure_optimizers(self):
