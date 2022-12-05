@@ -158,6 +158,8 @@ class StyleGAN2Module(pl.LightningModule):
                 torch.tensor(0, dtype=torch.float32, device=self.device)
             for acc_step in range(total_acc_steps):
                 fake, w = self.forward()
+                teacher_fake = \
+                    self.teacher_generator.synthesis(w, noise_mode='random')
                 loss_rgb0 = self.rgb_criterion(fake, teacher_fake)
 
                 if not torch.isnan(loss_rgb0):
