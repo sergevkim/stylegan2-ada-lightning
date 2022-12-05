@@ -77,7 +77,7 @@ class StyleGAN2Module(pl.LightningModule):
             w_dim=config.latent_dim,
             img_resolution=32,
             img_channels=3,
-            channels_max=256, #twice less than in teacher's network1
+            channel_max=256, #twice less than in teacher's network1
             synthesis_layer='stylegan2',
         )
 
