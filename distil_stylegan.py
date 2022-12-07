@@ -73,6 +73,8 @@ class StyleGAN2Module(pl.LightningModule):
             synthesis_layer=config.generator,
         )
         self.G.load_state_dict(generator_state_dict)
+        for param in self.G.parameters():
+            param.requires_grad = False
         self.G.synthesis = SynthesisNetwork(
             w_dim=config.latent_dim,
             img_resolution=32,
