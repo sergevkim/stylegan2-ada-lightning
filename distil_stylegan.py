@@ -216,7 +216,7 @@ class StyleGAN2Module(pl.LightningModule):
             offset = w1 - w0
             norm = torch.norm(offset, dim=1, keepdim=True)
             offset = offset / norm
-            alpha = torch.randn(1)
+            alpha = torch.randn(1).item()
 
             student_fake0 = self.G.synthesis(w0, noise_mode='random')
             student_fake1 = \
