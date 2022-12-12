@@ -134,7 +134,7 @@ class StyleGAN2Module(pl.LightningModule):
         self.lpips_criterion = lpips.LPIPS(net='vgg')
 
     def configure_optimizers(self):
-        g_opt = torch.optim.Adam(list(self.G.parameters()), lr=self.config.lr_g, betas=(0.0, 0.99), eps=1e-8)
+        g_opt = torch.optim.Adam(list(self.G.synthesis.parameters()), lr=self.config.lr_g, betas=(0.0, 0.99), eps=1e-8)
         d_opt = torch.optim.Adam(self.D.parameters(), lr=self.config.lr_d, betas=(0.0, 0.99), eps=1e-8)
         return g_opt, d_opt
 
