@@ -91,8 +91,8 @@ class StyleGAN2Module(pl.LightningModule):
             synthesis_layer=config.generator,
         )
         self.G.load_state_dict(generator_state_dict)
-        for param in self.G.parameters():
-            param.requires_grad = False
+        #for param in self.G.parameters():
+        #    param.requires_grad = False
         self.G.synthesis = SynthesisNetwork(
             w_dim=config.latent_dim,
             img_resolution=32,
@@ -235,7 +235,7 @@ class StyleGAN2Module(pl.LightningModule):
 
             student_similarity = torch.log_softmax(student_similarity, dim=1)
             teacher_similarity = torch.softmax(teacher_similarity, dim=1)
-            loss_kd += F.kl_div(
+            loss_kd += self.config.kd_coef * F.kl_div(
                 student_similarity,
                 teacher_similarity,
                 reduction='batchmean',
