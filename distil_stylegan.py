@@ -351,3 +351,22 @@ def main(config):
 
 if __name__ == '__main__':
     main()
+
+# LATENT:
+# noise - [(b, 512), (b, 512)] # https://github.com/xuguodong03/StyleKD/blob/6ae4d1724d1b4a2df4e987c9aec0f51c27c1e8d2/distributed_train.py#L210
+# styles = [style(s) for s in noise]
+# latent = b, 1, 512 -> b, 18, 512
+# latent = torch.cat([latent, latent + offset], dim=0) 2 * b, 18, 512 https://github.com/xuguodong03/StyleKD/blob/master/model.py#L618
+
+# LOSS
+# l1_loss = torch.mean(torch.abs(fake_teacher - fake_student))
+# style_loss = l1(student_w, teacher_w)
+# perceptual_loss/lpips - vgg - torch.mean(percept_loss(fake, real))
+# mimic_layer = [2, 3, 4, 5], feature - [(B, -1), (), ...]
+# cos_sim(feat_student[b, 1, h]{latent}, feat_student[1, b, h]{latent+offset}, dim=2)
+# mse(cos_sim(student, student), cos_sim(teacher, teacher))
+
+
+# ??? parsing net https://github.com/xuguodong03/StyleKD/blob/6ae4d1724d1b4a2df4e987c9aec0f51c27c1e8d2/distributed_train.py#L546
+# single_view тут по def_arg false https://github.com/xuguodong03/StyleKD/blob/6ae4d1724d1b4a2df4e987c9aec0f51c27c1e8d2/distributed_train.py#L134
+# simi_loss по def_arg mse
