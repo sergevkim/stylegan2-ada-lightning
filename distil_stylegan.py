@@ -81,6 +81,8 @@ class StyleGAN2Module(pl.LightningModule):
             synthesis_layer='stylegan2',
         )
         self.teacher_generator.load_state_dict(generator_state_dict)
+        for param in self.teacher_generator.parameters():
+            param.requires_grad = False
 
         self.G = Generator(
             config.latent_dim,
@@ -91,8 +93,8 @@ class StyleGAN2Module(pl.LightningModule):
             synthesis_layer=config.generator,
         )
         self.G.load_state_dict(generator_state_dict)
-        #for param in self.G.parameters():
-        #    param.requires_grad = False
+        for param in self.G.parameters():
+            param.requires_grad = False
         self.G.synthesis = SynthesisNetwork(
             w_dim=config.latent_dim,
             img_resolution=32,
@@ -208,33 +210,36 @@ class StyleGAN2Module(pl.LightningModule):
         log_kd_loss = \
             torch.tensor(0, dtype=torch.float32, device=self.device)
         for acc_step in range(total_acc_steps):
-            fake, w = self.forward()
-
-            offset = torch.randn_like(w) #TODO replace with eigenvectors
+            z0, z1 = self.latent(limit_batch_size=False)
+            w0 = self.G.mapping(z0)
+            w1 = self.G.mapping(z1)
+            offset = w1 - w0
             norm = torch.norm(offset, dim=1, keepdim=True)
             offset = offset / norm
+            alpha = torch.randn(1)
 
-            new_w = w + offset
+            student_fake0 = self.G.synthesis(w0, noise_mode='random')
+            student_fake1 = \
+                self.G.synthesis(w0 + alpha * offset, noise_mode='random')
 
-            new_fake = self.G.synthesis(new_w, noise_mode='random')
-
-            student_similarity = einops.rearrange(
-                F.cosine_similarity(fake, new_fake),
-                'bs h w -> bs (h w)',
+            teacher_fake0 = \
+                self.teacher_generator.synthesis(w0, noise_mode='random')
+            teacher_fake1 = self.teacher_generator.synthesis(
+                w0 + alpha * offset,
+                noise_mode='random',
             )
-
-            teacher_fake = \
-                self.teacher_generator.synthesis(w, noise_mode='random')
-            teacher_new_fake = \
-                self.teacher_generator.synthesis(new_w, noise_mode='random')
 
             teacher_similarity = einops.rearrange(
-                F.cosine_similarity(teacher_fake, teacher_new_fake),
+                F.cosine_similarity(teacher_fake0, teacher_fake1),
                 'bs h w -> bs (h w)',
             )
-
+            student_similarity = einops.rearrange(
+                F.cosine_similarity(student_fake0, student_fake1),
+                'bs h w -> bs (h w)',
+            )
             student_similarity = torch.log_softmax(student_similarity, dim=1)
             teacher_similarity = torch.softmax(teacher_similarity, dim=1)
+
             loss_kd = self.config.kd_coef * F.kl_div(
                 student_similarity,
                 teacher_similarity,

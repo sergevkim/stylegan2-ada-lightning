@@ -18,9 +18,9 @@ lazy_path_penalty_after: 0
 lazy_path_penalty_interval: 4
 latent_dim: 512
 lambda_gp: 0.0256
-rgb_coef: 0.1
-lpips_coef: 0.1
-kd_coef: 0.1
+rgb_coef: 0.02
+lpips_coef: 0.02
+kd_coef: 1
 lambda_plp: 2
 ada_start_p: 0.  #to disable set to -1
 ada_target: 0.6
