@@ -235,7 +235,7 @@ class StyleGAN2Module(pl.LightningModule):
 
             student_similarity = torch.log_softmax(student_similarity, dim=1)
             teacher_similarity = torch.softmax(teacher_similarity, dim=1)
-            loss_kd += self.config.kd_coef * F.kl_div(
+            loss_kd = self.config.kd_coef * F.kl_div(
                 student_similarity,
                 teacher_similarity,
                 reduction='batchmean',
