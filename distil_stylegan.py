@@ -9,9 +9,12 @@ from pathlib import Path
 
 import hydra
 import lpips
+import einops
+import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision
 import wandb
 from cleanfid import fid
@@ -43,6 +46,21 @@ def process_generator_ckpt(ckpt) -> OrderedDict:
             processed_state_dict[w_name[2:]] = w
 
     return processed_state_dict
+
+
+def calc_direction_global(model, args):
+    k = 0
+    pool = []
+    for i in range(max(args.mimic_layer)):
+        w1 = model.convs[2*i].conv.modulation.weight.data.cpu().numpy()
+        w2 = model.convs[2*i+1].conv.modulation.weight.data.cpu().numpy()
+        w = np.concatenate((w1,w2), axis=0).T
+        pool.append(w)
+        k += 5
+    w = np.hstack(pool)
+    w /= np.linalg.norm(w, axis=0, keepdims=True)
+    _, eigen_vectors = np.linalg.eig(w.dot(w.T))
+    return torch.from_numpy(eigen_vectors[:,:k].T)
 
 
 class StyleGAN2Module(pl.LightningModule):
@@ -185,6 +203,48 @@ class StyleGAN2Module(pl.LightningModule):
         log_lpips_loss /= total_acc_steps
         self.log("lpips_loss", log_lpips_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
         # torch.nn.utils.clip_grad_norm_(self.G.parameters(), max_norm=1.0)
+
+        g_opt.zero_grad(set_to_none=True)
+        log_kd_loss = \
+            torch.tensor(0, dtype=torch.float32, device=self.device)
+        for acc_step in range(total_acc_steps):
+            fake, w = self.forward()
+
+            offset = torch.randn_like(w) #TODO replace with eigenvectors
+            norm = torch.norm(offset, dim=1, keepdim=True)
+            offset = offset / norm
+
+            new_w = w + offset
+
+            new_fake = self.G.synthesis(new_w, noise_mode='random')
+
+            student_similarity = einops.rearrange(
+                F.cosine_distance(fake, new_fake),
+                'bs h w -> bs (h w)',
+            )
+
+            teacher_fake = \
+                self.teacher_generator.synthesis(w, noise_mode='random')
+            teacher_new_fake = \
+                self.teacher_generator.synthesis(new_w, noise_mode='random')
+
+            teacher_similarity = einops.rearrange(
+                F.cosine_distance(teacher_fake, teacher_new_fake),
+                'bs h w -> bs (h w)',
+            )
+
+            student_similarity = torch.log_softmax(student_similarity, dim=1)
+            teacher_similarity = torch.softmax(teacher_similarity, dim=1)
+            loss_kd += F.kl_div(
+                student_similarity,
+                teacher_similarity,
+                reduction='batchmean',
+            )
+            self.manual_backward(loss_kd)
+            log_kd_loss += loss_kd.detach()
+        g_opt.step()
+        log_kd_loss /= total_acc_steps
+        self.log("kd_loss", log_kd_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
 
         # optimize discriminator
         d_opt.zero_grad(set_to_none=True)
