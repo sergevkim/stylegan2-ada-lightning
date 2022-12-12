@@ -219,7 +219,7 @@ class StyleGAN2Module(pl.LightningModule):
             new_fake = self.G.synthesis(new_w, noise_mode='random')
 
             student_similarity = einops.rearrange(
-                F.cosine_distance(fake, new_fake),
+                F.cosine_similarity(fake, new_fake),
                 'bs h w -> bs (h w)',
             )
 
@@ -229,7 +229,7 @@ class StyleGAN2Module(pl.LightningModule):
                 self.teacher_generator.synthesis(new_w, noise_mode='random')
 
             teacher_similarity = einops.rearrange(
-                F.cosine_distance(teacher_fake, teacher_new_fake),
+                F.cosine_similarity(teacher_fake, teacher_new_fake),
                 'bs h w -> bs (h w)',
             )
 
