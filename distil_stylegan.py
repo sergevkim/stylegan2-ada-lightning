@@ -161,6 +161,7 @@ class StyleGAN2Module(pl.LightningModule):
         log_gen_loss /= total_acc_steps
         self.log("G", log_gen_loss, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
 
+        '''
         if self.global_step > self.config.lazy_path_penalty_after and (self.global_step + 1) % self.config.lazy_path_penalty_interval == 0:
             g_opt.zero_grad(set_to_none=True)
             log_plp_loss = torch.tensor(0, dtype=torch.float32, device=self.device)
@@ -174,6 +175,7 @@ class StyleGAN2Module(pl.LightningModule):
             g_opt.step()
             log_plp_loss /= total_acc_steps
             self.log("rPLP", log_plp_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
+        '''
 
         g_opt.zero_grad(set_to_none=True)
         log_rgb_loss = \
