@@ -224,7 +224,7 @@ class StyleGAN2Module(pl.LightningModule):
             offset = w1 - w0
             norm = torch.norm(offset, dim=1, keepdim=True)
             offset /= norm
-            alpha = max(0.1, torch.randn(1).item())
+            alpha = torch.randn(1).item()
 
             student_fake0 = self.G.synthesis(w0, noise_mode='random')
             student_fake1 = \
@@ -248,13 +248,12 @@ class StyleGAN2Module(pl.LightningModule):
             student_similarity = torch.log_softmax(student_similarity, dim=1)
             teacher_similarity = torch.softmax(teacher_similarity, dim=1)
 
-            loss_kd0 = F.kl_div(
+            loss_kd = self.config.kd_coef * F.kl_div(
                 student_similarity,
                 teacher_similarity,
                 reduction='batchmean',
             )
-            if not torch.isnan(loss_kd0):
-                loss_kd = self.config.kd_coef * loss_kd0
+            if not torch.isnan(loss_kd):
                 self.manual_backward(loss_kd)
                 log_kd_loss += loss_kd.detach()
         torch.nn.utils.clip_grad_norm_(self.G.synthesis.parameters(), 10)
