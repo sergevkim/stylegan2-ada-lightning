@@ -157,6 +157,7 @@ class StyleGAN2Module(pl.LightningModule):
             gen_loss = torch.nn.functional.softplus(-p_fake).mean()
             self.manual_backward(gen_loss)
             log_gen_loss += gen_loss.detach()
+        torch.nn.utils.clip_grad_norm_(self.G.synthesis.parameters(), 10)
         g_opt.step()
         log_gen_loss /= total_acc_steps
         self.log("G", log_gen_loss, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
@@ -172,6 +173,7 @@ class StyleGAN2Module(pl.LightningModule):
                     plp_loss = self.config.lambda_plp * plp * self.config.lazy_path_penalty_interval
                     self.manual_backward(plp_loss)
                     log_plp_loss += plp.detach()
+            torch.nn.utils.clip_grad_norm_(self.G.parameters(), 10)
             g_opt.step()
             log_plp_loss /= total_acc_steps
             self.log("rPLP", log_plp_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
@@ -185,9 +187,11 @@ class StyleGAN2Module(pl.LightningModule):
             teacher_fake = \
                 self.teacher_generator.synthesis(w, noise_mode='random')
             loss_rgb0 = self.rgb_criterion(fake, teacher_fake)
-            loss_rgb = self.config.rgb_coef * loss_rgb0
-            self.manual_backward(loss_rgb)
-            log_rgb_loss += loss_rgb.detach()
+            if not torch.isnan(loss_rgb0):
+                loss_rgb = self.config.rgb_coef * loss_rgb0
+                self.manual_backward(loss_rgb)
+                log_rgb_loss += loss_rgb.detach()
+        torch.nn.utils.clip_grad_norm_(self.G.synthesis.parameters(), 10)
         g_opt.step()
         log_rgb_loss /= total_acc_steps
         self.log("rgb_loss", log_rgb_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
@@ -200,9 +204,11 @@ class StyleGAN2Module(pl.LightningModule):
             teacher_fake = \
                 self.teacher_generator.synthesis(w, noise_mode='random')
             loss_lpips0 = self.lpips_criterion(fake, teacher_fake).mean()
-            loss_lpips = self.config.lpips_coef * loss_lpips0
-            self.manual_backward(loss_lpips)
-            log_lpips_loss += loss_lpips.detach()
+            if not torch.isnan(loss_lpips0):
+                loss_lpips = self.config.lpips_coef * loss_lpips0
+                self.manual_backward(loss_lpips)
+                log_lpips_loss += loss_lpips.detach()
+        torch.nn.utils.clip_grad_norm_(self.G.synthesis.parameters(), 10)
         g_opt.step()
         log_lpips_loss /= total_acc_steps
         self.log("lpips_loss", log_lpips_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
@@ -217,8 +223,8 @@ class StyleGAN2Module(pl.LightningModule):
             w1 = self.G.mapping(z1)
             offset = w1 - w0
             norm = torch.norm(offset, dim=1, keepdim=True)
-            offset = offset / norm
-            alpha = torch.randn(1).item()
+            offset /= norm
+            alpha = max(0.1, torch.randn(1).item())
 
             student_fake0 = self.G.synthesis(w0, noise_mode='random')
             student_fake1 = \
@@ -242,13 +248,16 @@ class StyleGAN2Module(pl.LightningModule):
             student_similarity = torch.log_softmax(student_similarity, dim=1)
             teacher_similarity = torch.softmax(teacher_similarity, dim=1)
 
-            loss_kd = self.config.kd_coef * F.kl_div(
+            loss_kd0 = F.kl_div(
                 student_similarity,
                 teacher_similarity,
                 reduction='batchmean',
             )
-            self.manual_backward(loss_kd)
-            log_kd_loss += loss_kd.detach()
+            if not torch.isnan(loss_kd0):
+                loss_kd = self.config.kd_coef * loss_kd0
+                self.manual_backward(loss_kd)
+                log_kd_loss += loss_kd.detach()
+        torch.nn.utils.clip_grad_norm_(self.G.synthesis.parameters(), 10)
         g_opt.step()
         log_kd_loss /= total_acc_steps
         self.log("kd_loss", log_kd_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
