@@ -12,3 +12,5 @@ wandb
 timm
 clean-fid
 torch-ema
+lpips
+einops

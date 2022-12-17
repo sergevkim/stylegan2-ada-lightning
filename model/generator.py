@@ -11,7 +11,12 @@ class Generator(torch.nn.Module):
         self.w_dim = w_dim
         self.img_resolution = img_resolution
         self.img_channels = img_channels
-        self.synthesis = SynthesisNetwork(w_dim=w_dim, img_resolution=img_resolution, img_channels=img_channels, synthesis_layer=synthesis_layer)
+        self.synthesis = SynthesisNetwork(
+            w_dim=w_dim,
+            img_resolution=img_resolution,
+            img_channels=img_channels,
+            synthesis_layer=synthesis_layer,
+        )
         self.num_ws = self.synthesis.num_ws
         self.mapping = MappingNetwork(z_dim=z_dim, w_dim=w_dim, num_ws=self.num_ws, num_layers=w_num_layers)
 
