@@ -48,11 +48,15 @@ class SynthesisNetwork(torch.nn.Module):
             block = SynthesisBlock(in_channels, out_channels, w_dim=w_dim, resolution=res, img_channels=img_channels, synthesis_layer=synthesis_layer)
             self.blocks.append(block)
 
-    def forward(self, ws, noise_mode='random'):
+    def forward(self, ws, noise_mode='random', return_features=False):
         split_ws = [ws[:, 0:2, :]] + [ws[:, 2 * n + 1: 2 * n + 4, :] for n in range(len(self.block_resolutions))]
         x, img = self.first_block(split_ws[0], noise_mode)
+        features = [x]
         for i in range(len(self.block_resolutions) - 1):
             x, img = self.blocks[i](x, img, split_ws[i + 1], noise_mode)
+            features.append(x)
+        if return_features:
+            return img, features
         return img
 
 

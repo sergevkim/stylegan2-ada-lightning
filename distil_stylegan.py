@@ -1,5 +1,7 @@
 import torch.multiprocessing
 
+from util.distil_utils import calc_direction_split, compute_offsets
+
 torch.multiprocessing.set_sharing_strategy('file_system')    # a fix for the "OSError: too many files" exception
 
 import math
@@ -12,6 +14,7 @@ import lpips
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 import torchvision
 import wandb
 from cleanfid import fid
@@ -64,6 +67,12 @@ class StyleGAN2Module(pl.LightningModule):
         )
         self.teacher_generator.load_state_dict(generator_state_dict)
 
+        if config.use_simi_loss:
+            if config.mimin_layers is None or len(config.mimin_layers) < 1:
+                raise ValueError
+
+            self.offset_vectors = calc_direction_split(self.teacher_generator, config.mimin_layers)
+
         self.G = Generator(
             config.latent_dim,
             config.latent_dim,
@@ -73,6 +82,8 @@ class StyleGAN2Module(pl.LightningModule):
             synthesis_layer=config.generator,
         )
         self.G.load_state_dict(generator_state_dict)
+        for param in self.G.parameters():
+            param.requires_grad = False
         self.G.synthesis = SynthesisNetwork(
             w_dim=config.latent_dim,
             img_resolution=32,
@@ -116,11 +127,15 @@ class StyleGAN2Module(pl.LightningModule):
         d_opt = torch.optim.Adam(self.D.parameters(), lr=self.config.lr_d, betas=(0.0, 0.99), eps=1e-8)
         return g_opt, d_opt
 
-    def forward(self, limit_batch_size=False):
+    def forward(self, limit_batch_size=False, return_features=False):
         z = self.latent(limit_batch_size)
         w = self.get_mapped_latent(z, 0.9)
-        fake = self.G.synthesis(w)
-        return fake, w
+        if return_features:
+            fake, features = self.G.synthesis(w, return_features=True)
+            return fake, w, features
+        else:
+            fake = self.G.synthesis(w, return_features=False)
+            return fake, w
 
     def training_step(self, batch, batch_idx):
         total_acc_steps = self.config.batch_size // self.config.batch_gpu
@@ -183,6 +198,37 @@ class StyleGAN2Module(pl.LightningModule):
         log_lpips_loss /= total_acc_steps
         self.log("lpips_loss", log_lpips_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
         # torch.nn.utils.clip_grad_norm_(self.G.parameters(), max_norm=1.0)
+
+        if self.config.use_simi_loss:
+            g_opt.zero_grad(set_to_none=True)
+            _, w, student_features = self.forward(return_features=True)
+
+            offsets = compute_offsets(self.offset_vectors, self.config.offset_weight, w.shape[0], self.device)
+            w_offset = w + offsets
+
+            _, student_features_offset = self.G.synthesis(w_offset, return_features=True)
+            _, teacher_features = self.teacher_generator.synthesis(w, return_features=True)
+            _, teacher_features_offset = self.teacher_generator.synthesis(w_offset, return_features=True)
+
+            simi_loss = 0
+            for index in self.config.mimin_layers:
+                f1 = student_features[index]
+                f2 = student_features_offset[index]
+                s_simi = F.cosine_similarity(f1[:, None, :], f2[None, :, :], dim=2)
+
+                f1 = teacher_features[index]
+                f2 = teacher_features_offset[index]
+                t_simi = F.cosine_similarity(f1[:, None, :], f2[None, :, :], dim=2)
+
+                simi_loss += F.mse_loss(s_simi, t_simi)
+
+            simi_loss *= self.config.simi_lambda
+
+            self.manual_backward(simi_loss)
+            g_opt.step()
+
+            self.log("simi_loss", simi_loss.detach(), on_step=True, on_epoch=False, prog_bar=False, logger=True,
+                     sync_dist=True)
 
         # optimize discriminator
         d_opt.zero_grad(set_to_none=True)
@@ -349,3 +395,22 @@ def main(config):
 
 if __name__ == '__main__':
     main()
+
+# LATENT:
+# noise - [(b, 512), (b, 512)] # https://github.com/xuguodong03/StyleKD/blob/6ae4d1724d1b4a2df4e987c9aec0f51c27c1e8d2/distributed_train.py#L210
+# styles = [style(s) for s in noise]
+# latent = b, 1, 512 -> b, 18, 512
+# latent = torch.cat([latent, latent + offset], dim=0) 2 * b, 18, 512 https://github.com/xuguodong03/StyleKD/blob/master/model.py#L618
+
+# LOSS
+# l1_loss = torch.mean(torch.abs(fake_teacher - fake_student))
+# style_loss = l1(student_w, teacher_w)
+# perceptual_loss/lpips - vgg - torch.mean(percept_loss(fake, real))
+# mimic_layer = [2, 3, 4, 5], feature - [(B, -1), (), ...]
+# cos_sim(feat_student[b, 1, h]{latent}, feat_student[1, b, h]{latent+offset}, dim=2)
+# mse(cos_sim(student, student), cos_sim(teacher, teacher))
+
+
+# ??? parsing net https://github.com/xuguodong03/StyleKD/blob/6ae4d1724d1b4a2df4e987c9aec0f51c27c1e8d2/distributed_train.py#L546
+# single_view тут по def_arg false https://github.com/xuguodong03/StyleKD/blob/6ae4d1724d1b4a2df4e987c9aec0f51c27c1e8d2/distributed_train.py#L134
+# simi_loss по def_arg mse
