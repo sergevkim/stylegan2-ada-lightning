@@ -147,6 +147,8 @@ class StyleGAN2Module(pl.LightningModule):
             return fake, w
 
     def corrupt(self, feature):
+        print(type(feature))
+        print(feature)
         bs, _, h, w = feature.shape
         mask = torch.rand((bs, 1, h, w), device=self.device)
         mask = torch.where(mask > 0.5, 0, 1)
