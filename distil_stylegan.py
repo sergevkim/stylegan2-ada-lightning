@@ -73,14 +73,27 @@ class StyleGAN2Module(pl.LightningModule):
 
             self.offset_vectors = calc_direction_split(self.teacher_generator, config.mimin_layers)
 
-        self.recover_nets = [
+        self.recover_net0 = \
             nn.Sequential(
                 nn.Conv2d(256, 512, kernel_size=1),
                 nn.Conv2d(512, 512, kernel_size=3, padding=1),
                 nn.ReLU(),
                 nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            ).to(self.device) for _ in self.config.mgd_layers
-        ]
+            ).to(self.device)
+        self.recover_net1 = \
+            nn.Sequential(
+                nn.Conv2d(256, 512, kernel_size=1),
+                nn.Conv2d(512, 512, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            ).to(self.device)
+        self.recover_net2 = \
+            nn.Sequential(
+                nn.Conv2d(256, 512, kernel_size=1),
+                nn.Conv2d(512, 512, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            ).to(self.device)
 
         self.G = Generator(
             config.latent_dim,
@@ -225,7 +238,13 @@ class StyleGAN2Module(pl.LightningModule):
                 t1 = teacher_features[index]
                 s1 = student_features[index]
                 corrupted_s1 = self.corrupt(s1)
-                rec_s1 = self.recover_nets[index](corrupted_s1)
+                if index == 0:
+                    recover_net = self.recover_net0
+                elif index == 1:
+                    recover_net = self.recover_net1
+                elif index == 2:
+                    recover_net = self.recover_net2
+                rec_s1 = recover_net(corrupted_s1)
                 mgd_loss += F.mse_loss(rec_s1, t1)
 
             self.manual_backward(mgd_loss)
