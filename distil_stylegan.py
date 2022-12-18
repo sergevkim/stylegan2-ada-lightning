@@ -147,8 +147,6 @@ class StyleGAN2Module(pl.LightningModule):
             return fake, w
 
     def corrupt(self, feature):
-        print(type(feature))
-        print(feature)
         bs, _, h, w = feature.shape
         mask = torch.rand((bs, 1, h, w), device=self.device)
         mask = torch.where(mask > 0.5, 0, 1)
@@ -191,8 +189,7 @@ class StyleGAN2Module(pl.LightningModule):
             torch.tensor(0, dtype=torch.float32, device=self.device)
         for acc_step in range(total_acc_steps):
             fake, w = self.forward()
-            teacher_fake = \
-                self.teacher_generator.synthesis(w, noise_mode='random')
+            teacher_fake = self.teacher_generator.synthesis(w)
             loss_rgb0 = self.rgb_criterion(fake, teacher_fake)
             loss_rgb = self.config.rgb_coef * loss_rgb0
             self.manual_backward(loss_rgb)
@@ -205,15 +202,8 @@ class StyleGAN2Module(pl.LightningModule):
         log_lpips_loss = \
             torch.tensor(0, dtype=torch.float32, device=self.device)
         for acc_step in range(total_acc_steps):
-            fake, w, student_features = self.forward(return_features=True)
-            teacher_fake, teacher_features = \
-                self.teacher_generator.synthesis(w, return_features=True)
-            corrupted_student_features = self.corrupt(student_features)
-            rec_student_features = self.recover(corrupted_student_features)
-
-            for i, criterion in enumerate(self.mgd_criterions):
-                mgd_loss = criterion(rec_student_features, teacher_features)
-                self.manual_backward(mgd_loss)
+            fake, w = self.forward()
+            teacher_fake = self.teacher_generator.synthesis(w)
 
             loss_lpips0 = self.lpips_criterion(fake, teacher_fake).mean()
             loss_lpips = self.config.lpips_coef * loss_lpips0
