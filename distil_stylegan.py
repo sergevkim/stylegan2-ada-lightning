@@ -79,7 +79,7 @@ class StyleGAN2Module(pl.LightningModule):
                 nn.Conv2d(512, 512, kernel_size=3, padding=1),
                 nn.ReLU(),
                 nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            ) for _ in self.config.mgd_layers
+            ).to(self.device) for _ in self.config.mgd_layers
         ]
 
         self.G = Generator(
