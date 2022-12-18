@@ -73,6 +73,15 @@ class StyleGAN2Module(pl.LightningModule):
 
             self.offset_vectors = calc_direction_split(self.teacher_generator, config.mimin_layers)
 
+        self.recover_nets = [
+            nn.Sequential(
+                nn.Conv2d(256, 512, kernel_size=1),
+                nn.Conv2d(512, 512, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            ) for _ in self.config.mgd_layers
+        ]
+
         self.G = Generator(
             config.latent_dim,
             config.latent_dim,
@@ -137,6 +146,13 @@ class StyleGAN2Module(pl.LightningModule):
             fake = self.G.synthesis(w, return_features=False)
             return fake, w
 
+    def corrupt(self, feature):
+        bs, _, h, w = feature.shape
+        mask = torch.rand((bs, 1, h, w), device=self.device)
+        mask = torch.where(mask > 0.5, 0, 1)
+        corrupted_feature = mask * feature
+        return corrupted_feature
+
     def training_step(self, batch, batch_idx):
         total_acc_steps = self.config.batch_size // self.config.batch_gpu
         g_opt, d_opt = self.optimizers()
@@ -187,9 +203,16 @@ class StyleGAN2Module(pl.LightningModule):
         log_lpips_loss = \
             torch.tensor(0, dtype=torch.float32, device=self.device)
         for acc_step in range(total_acc_steps):
-            fake, w = self.forward()
-            teacher_fake = \
-                self.teacher_generator.synthesis(w, noise_mode='random')
+            fake, w, student_features = self.forward(return_features=True)
+            teacher_fake, teacher_features = \
+                self.teacher_generator.synthesis(w, return_features=True)
+            corrupted_student_features = self.corrupt(student_features)
+            rec_student_features = self.recover(corrupted_student_features)
+
+            for i, criterion in enumerate(self.mgd_criterions):
+                mgd_loss = criterion(rec_student_features, teacher_features)
+                self.manual_backward(mgd_loss)
+
             loss_lpips0 = self.lpips_criterion(fake, teacher_fake).mean()
             loss_lpips = self.config.lpips_coef * loss_lpips0
             self.manual_backward(loss_lpips)
@@ -199,6 +222,26 @@ class StyleGAN2Module(pl.LightningModule):
         self.log("lpips_loss", log_lpips_loss, on_step=True, on_epoch=False, prog_bar=False, logger=True, sync_dist=True)
         # torch.nn.utils.clip_grad_norm_(self.G.parameters(), max_norm=1.0)
 
+        if self.config.use_mgd_loss:
+            g_opt.zero_grad(set_to_none=True)
+            _, w, student_features = self.forward(return_features=True)
+            _, teacher_features = \
+                self.teacher_generator.synthesis(w, return_features=True)
+
+            mgd_loss = 0
+            for index in self.config.mgd_layers:
+                t1 = teacher_features[index]
+                s1 = student_features[index]
+                corrupted_s1 = self.corrupt(s1)
+                rec_s1 = self.recover_nets[index](corrupted_s1)
+                mgd_loss += F.mse_loss(rec_s1, t1)
+
+            self.manual_backward(mgd_loss)
+            g_opt.step()
+            self.log("mgd_loss", mgd_loss.detach(), on_step=True, on_epoch=False,
+                     prog_bar=False, logger=True, sync_dist=True)
+            # torch.nn.utils.clip_grad_norm_(self.G.parameters(), max_norm=1.0)
+
         if self.config.use_simi_loss:
             g_opt.zero_grad(set_to_none=True)
             _, w, student_features = self.forward(return_features=True)
@@ -207,6 +250,7 @@ class StyleGAN2Module(pl.LightningModule):
             w_offset = w + offsets
 
             _, student_features_offset = self.G.synthesis(w_offset, return_features=True)
+
             _, teacher_features = self.teacher_generator.synthesis(w, return_features=True)
             _, teacher_features_offset = self.teacher_generator.synthesis(w_offset, return_features=True)
 

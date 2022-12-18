@@ -33,7 +33,7 @@ class SynthesisNetwork(torch.nn.Module):
 
         self.w_dim = w_dim
         self.img_resolution = img_resolution
-        self.img_resolution_log2 = int(np.log2(img_resolution))
+        self.img_resolution_log2 = int(np.log2(img_resolution)) # 5
         self.img_channels = img_channels
         self.block_resolutions = [2 ** i for i in range(2, self.img_resolution_log2 + 1)]
         self.num_ws = 2 * (len(self.block_resolutions) + 1)
@@ -297,7 +297,7 @@ def test_generator():
 if __name__ == '__main__':
     from util.misc import print_model_parameter_count, print_module_summary
 
-    model = Generator(512, 512, 2, 64, 3, synthesis_layer='stylegan1')
+    model = Generator(512, 512, 2, 32, 3, synthesis_layer='stylegan2')
     print_module_summary(model, (torch.randn((16, 512)), ))
     print_model_parameter_count(model)
 

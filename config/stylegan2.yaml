@@ -30,6 +30,9 @@ use_simi_loss: True
 mimin_layers: [0, 1, 2]
 offset_weight: 5.0
 simi_lambda: 1.0
+use_mgd_loss: True
+mgd_layers: [0, 1, 2]
+mgd_lambda: 0.5
 
 image_size: 32
 num_eval_images: 8096
