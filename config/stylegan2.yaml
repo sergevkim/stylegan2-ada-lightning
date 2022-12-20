@@ -18,7 +18,7 @@ lazy_path_penalty_after: 1000000000
 lazy_path_penalty_interval: 4
 latent_dim: 512
 lambda_gp: 0.0256
-rgb_coef: 1
+rgb_coef: 0.1
 lpips_coef: 1
 lambda_plp: 2
 ada_start_p: 0.  #to disable set to -1
