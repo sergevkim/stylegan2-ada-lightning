@@ -162,7 +162,7 @@ class StyleGAN2Module(pl.LightningModule):
     def corrupt(self, feature):
         bs, _, h, w = feature.shape
         mask = torch.rand((bs, 1, h, w), device=self.device)
-        mask = torch.where(mask > 0.8, 0, 1)
+        mask = torch.where(mask > 0.95, 0, 1)
         corrupted_feature = mask * feature
         return corrupted_feature
 
@@ -247,7 +247,7 @@ class StyleGAN2Module(pl.LightningModule):
                 rec_s1 = recover_net(corrupted_s1)
                 mgd_loss += F.mse_loss(rec_s1, t1)
 
-            mgd_loss *= 0.05
+            mgd_loss *= 0.01
             self.manual_backward(mgd_loss)
             g_opt.step()
             self.log("mgd_loss", mgd_loss.detach(), on_step=True, on_epoch=False,
